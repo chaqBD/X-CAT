@@ -14,7 +14,16 @@ from app.core.database import Base
 import app.models  # noqa: F401 — registers all models
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
+# DATABASE_URL may be None when the module is imported at app startup before
+# Railway has injected environment variables.  Guard against that here so we
+# don't raise "TypeError: option values must be strings" at import time.
+# The actual URL is resolved (and validated) inside run_migrations_online /
+# run_migrations_offline, so migrations will still fail loudly if the variable
+# is genuinely missing when alembic is invoked.
+_database_url = settings.DATABASE_URL
+if _database_url:
+    config.set_main_option("sqlalchemy.url", _database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -39,7 +48,9 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    # Prefer the already-configured option; fall back to settings so that the
+    # URL is always resolved at migration time even if it was None at import.
+    url = config.get_main_option("sqlalchemy.url") or settings.get_database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -58,6 +69,11 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Ensure the URL is set at migration time even if DATABASE_URL was absent
+    # at module-import time (e.g. during Railway container startup).
+    if not config.get_main_option("sqlalchemy.url", fallback=None):
+        config.set_main_option("sqlalchemy.url", settings.get_database_url())
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
