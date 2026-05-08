@@ -71,7 +71,7 @@ def run_migrations_online() -> None:
     """
     # Ensure the URL is set at migration time even if DATABASE_URL was absent
     # at module-import time (e.g. during Railway container startup).
-    if not config.get_main_option("sqlalchemy.url", fallback=None):
+    if not config.get_main_option("sqlalchemy.url"):
         config.set_main_option("sqlalchemy.url", settings.get_database_url())
 
     connectable = engine_from_config(
